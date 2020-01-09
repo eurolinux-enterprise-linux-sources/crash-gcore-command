@@ -4,7 +4,7 @@
 Summary: Gcore extension module for the crash utility
 Name: crash-gcore-command
 Version: 1.2.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 License: GPLv2
 Group: Development/Debuggers
 Source: %{name}-%{version}.tar.gz
@@ -42,6 +42,9 @@ rm -Rf $RPM_BUILD_ROOT
 %doc COPYING
 
 %changelog
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 1.2.1-2
+- Mass rebuild 2013-12-27
+
 
 * Tue Aug 20 2013 Dave Anderson <anderson@redhat.com> - 1.2.1-1
   crash utility has added LZO and snappy compression in addition to zlib.
