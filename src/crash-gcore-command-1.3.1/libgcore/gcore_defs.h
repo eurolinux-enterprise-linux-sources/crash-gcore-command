@@ -15,14 +15,19 @@
 #ifndef GCORE_DEFS_H_
 #define GCORE_DEFS_H_
 
+#include <stdio.h>
 #include <elf.h>
 
-#ifdef X86_64
+#if defined(X86_64) || defined(ARM64)
 #define GCORE_ARCH_COMPAT 1
 #endif
 
 #ifdef X86_64
 #include <gcore_compat_x86.h>
+#endif
+
+#ifdef ARM64
+#include <gcore_compat_arm.h>
 #endif
 
 #define PN_XNUM 0xffff
@@ -89,6 +94,60 @@
 #define Elf_Nhdr Elf32_Nhdr
 #endif
 
+#ifdef ARM64
+#define ELF_EXEC_PAGESIZE PAGESIZE()
+
+#define ELF_MACHINE EM_AARCH64
+#define ELF_OSABI ELFOSABI_NONE
+
+#define ELF_CLASS ELFCLASS64
+#define ELF_DATA ELFDATA2LSB
+#define ELF_ARCH EM_AARCH64
+
+#define Elf_Half Elf64_Half
+#define Elf_Word Elf64_Word
+#define Elf_Off Elf64_Off
+
+#define Elf_Ehdr Elf64_Ehdr
+#define Elf_Phdr Elf64_Phdr
+#define Elf_Shdr Elf64_Shdr
+#define Elf_Nhdr Elf64_Nhdr
+
+#ifndef NT_ARM_TLS
+#define NT_ARM_TLS      0x401           /* ARM TLS register */
+#endif
+#endif
+
+#ifdef PPC64
+#define ELF_EXEC_PAGESIZE PAGESIZE()
+
+#define ELF_MACHINE EM_PPC64
+#define ELF_OSABI ELFOSABI_NONE
+
+#define ELF_CLASS ELFCLASS64
+
+#ifndef ELF_DATA
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define ELF_DATA ELFDATA2LSB
+#else
+#define ELF_DATA ELFDATA2MSB
+#endif
+#endif
+
+#define ELF_ARCH EM_PPC64
+
+#define Elf_Half Elf64_Half
+#define Elf_Word Elf64_Word
+#define Elf_Off Elf64_Off
+
+#define Elf_Ehdr Elf64_Ehdr
+#define Elf_Phdr Elf64_Phdr
+#define Elf_Shdr Elf64_Shdr
+#define Elf_Nhdr Elf64_Nhdr
+#endif
+
+#define PAGE_ALIGN(X) roundup(X, ELF_EXEC_PAGESIZE)
+
 /*
  * gcore_regset.c
  *
@@ -125,20 +184,6 @@ typedef int user_regset_get_fn(struct task_context *target,
 			       unsigned int size,
 			       void *buf);
 
-/**
- * user_regset_writeback_fn - type of @writeback function in &struct user_regset
- * @target:	thread being examined
- * @regset:	regset being examined
- * @immediate:	zero if writeback at completion of next context switch is OK
- *
- * This call is optional; usually the pointer is %NULL.
- *
- * Return TRUE on success or FALSE otherwise.
- */
-typedef int user_regset_writeback_fn(struct task_context *target,
-				     const struct user_regset *regset,
-				     int immediate);
-
 struct elf_thread_core_info;
 
 /**
@@ -168,19 +213,17 @@ typedef void user_regset_callback_fn(struct elf_thread_core_info *t,
  * resource and the operations necessary in core dump process.
  *
  * @get provides a means of retrieving the corresponding resource;
- * @active provides a means of checking if the resource exists;
- * @writeback performs some architecture-specific operation to make it
- * reflect the current actual state; @size means a size of the machine
- * resource in bytes; @core_note_type is a type of note information;
- * @name is a note section name representing the owner originator that
- * handles this kind of the machine resource; @callback is an extra
- * operation to edit another note information of the same thread,
- * required when the machine resource is collected.
+ * @active provides a means of checking if the resource exists; @size
+ * means a size of the machine resource in bytes; @core_note_type is a
+ * type of note information; @name is a note section name representing
+ * the owner originator that handles this kind of the machine
+ * resource; @callback is an extra operation to edit another note
+ * information of the same thread, required when the machine resource
+ * is collected.
  */
 struct user_regset {
 	user_regset_get_fn		*get;
 	user_regset_active_fn		*active;
-	user_regset_writeback_fn	*writeback;
 	unsigned int 			size;
 	unsigned int 			core_note_type;
 	char                            *name;
@@ -241,6 +284,18 @@ extern void gcore_default_regsets_init(void);
 #define REGSET_VIEW_NAME "arm"
 #define REGSET_VIEW_MACHINE EM_ARM
 #endif
+
+#ifdef ARM64
+#define REGSET_VIEW_NAME "aarch64"
+#define REGSET_VIEW_MACHINE EM_AARCH64
+#endif
+
+#ifdef PPC64
+#define REGSET_VIEW_NAME "ppc64"
+#define REGSET_VIEW_MACHINE EM_PPC64
+#endif
+
+extern int gcore_arch_get_fp_valid(struct task_context *tc);
 
 /*
  * gcore_dumpfilter.c
@@ -392,7 +447,6 @@ struct user_regs_struct {
 	unsigned long	fs;
 	unsigned long	gs;
 };
-#endif
 
 struct user_regs_struct32 {
 	uint32_t ebx, ecx, edx, esi, edi, ebp, eax;
@@ -403,6 +457,7 @@ struct user_regs_struct32 {
 	uint32_t eflags, esp;
 	unsigned short ss, __ss;
 };
+#endif
 
 #ifdef X86
 struct user_regs_struct {
@@ -472,12 +527,110 @@ struct user_regs_struct{
 #define ARM_VFPREGS_SIZE ( 32 * 8 /*fpregs*/ + 4 /*fpscr*/ )
 #endif
 
+#ifdef ARM64
+
+typedef unsigned int __u32;
+/*
+ * User structures for general purpose, floating point and debug registers.
+ */
+struct user_pt_regs {
+        __u64           regs[31];
+        __u64           sp;
+        __u64           pc;
+        __u64           pstate;
+};
+
+struct user_fpsimd_state {
+        __uint128_t     vregs[32];
+        __u32           fpsr;
+        __u32           fpcr;
+};
+
+struct user_hwdebug_state {
+        __u32           dbg_info;
+        __u32           pad;
+        struct {
+                __u64   addr;
+                __u32   ctrl;
+                __u32   pad;
+        }               dbg_regs[16];
+};
+
+/* Type for a general-purpose register.  */
+typedef unsigned long elf_greg_t;
+
+/* And the whole bunch of them.  We could have used `struct
+   pt_regs' directly in the typedef, but tradition says that
+   the register set is an array, which does have some peculiar
+   semantics, so leave it that way.  */
+#define ELF_NGREG (sizeof (struct user_pt_regs) / sizeof(elf_greg_t))
+typedef elf_greg_t elf_gregset_t[ELF_NGREG];
+
+/* Register set for the floating-point registers.  */
+typedef struct user_fpsimd_state elf_fpregset_t;
+
+#ifdef GCORE_ARCH_COMPAT
+/* AArch32 registers. */
+struct user_regs_struct32{
+	uint32_t r0;
+	uint32_t r1;
+	uint32_t r2;
+	uint32_t r3;
+	uint32_t r4;
+	uint32_t r5;
+	uint32_t r6;
+	uint32_t r7;
+	uint32_t r8;
+	uint32_t r9;
+	uint32_t r10;
+	uint32_t fp;
+	uint32_t ip;
+	uint32_t sp;
+	uint32_t lr;
+	uint32_t pc;
+	uint32_t cpsr;
+	uint32_t ORIG_r0;
+};
+#endif /* GCORE_ARCH_COMPAT */
+#endif
+
+#ifdef PPC64
+/* taken from asm/ptrace.h */
+struct user_regs_struct {
+	unsigned long gpr[32];
+	unsigned long nip;
+	unsigned long msr;
+	unsigned long orig_gpr3;	/* Used for restarting system calls */
+	unsigned long ctr;
+	unsigned long link;
+	unsigned long xer;
+	unsigned long ccr;
+#ifdef __powerpc64__
+	unsigned long softe;		/* Soft enabled/disabled */
+#else
+	unsigned long mq;		/* 601 only (not used at present) */
+			/* Used on APUS to hold IPL value. */
+#endif
+	unsigned long trap;		/* Reason for being here */
+	/* N.B. for critical exceptions on 4xx, the dar and dsisr
+	   fields are overloaded to hold srr0 and srr1. */
+	unsigned long dar;		/* Fault registers */
+	unsigned long dsisr;		/* on 4xx/Book-E used for ESR */
+	unsigned long result;		/* Result of a system call */
+};
+#endif
+
+#if defined(X86) || defined(X86_64) || defined(ARM)
 typedef ulong elf_greg_t;
 #define ELF_NGREG (sizeof(struct user_regs_struct) / sizeof(elf_greg_t))
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
+#endif
 
 #if defined(X86) || defined(ARM)
 #define PAGE_SIZE 4096
+#endif
+#if defined(ARM64) || defined(PPC64)
+#define PAGE_SIZE PAGESIZE()
 #endif
 
 extern int gcore_is_arch_32bit_emulation(struct task_context *tc);
@@ -630,16 +783,25 @@ struct elf_prstatus
 	int pr_fpvalid;		/* True if math co-processor being used.  */
 };
 
+#if defined(X86) || defined(X86_64) || defined(ARM)
 typedef unsigned short __kernel_old_uid_t;
 typedef unsigned short __kernel_old_gid_t;
+#endif
 
-typedef __kernel_old_uid_t      old_uid_t;
-typedef __kernel_old_gid_t      old_gid_t;
-
-#ifdef X86_64
+#if defined(X86_64) || defined(ARM64) || defined(PPC64)
 typedef unsigned int __kernel_uid_t;
 typedef unsigned int __kernel_gid_t;
 #endif
+
+#ifdef ARM64
+#ifndef __kernel_old_uid_t
+typedef __kernel_uid_t  __kernel_old_uid_t;
+typedef __kernel_gid_t  __kernel_old_gid_t;
+#endif
+#endif
+
+typedef __kernel_old_uid_t      old_uid_t;
+typedef __kernel_old_gid_t      old_gid_t;
 
 #if defined(X86) || defined(ARM)
 typedef unsigned short __kernel_uid_t;
@@ -774,28 +936,16 @@ struct memelfnote
 	void *data;
 };
 
-struct elf_thread_core_info {
-	struct elf_thread_core_info *next;
-	ulong task;
-	union prstatus {
-		struct elf_prstatus native;
-#ifdef GCORE_ARCH_COMPAT
-		struct compat_elf_prstatus compat;
-#endif
-	} prstatus;
-	struct memelfnote notes[0];
-};
-
 struct elf_note_info {
 	void (*fill_prstatus_note)(struct elf_note_info *info,
-				   struct elf_thread_core_info *t,
-				   const struct thread_group_list *tglist,
-				   void *pr_reg);
-	void (*fill_psinfo_note)(struct elf_note_info *info, ulong task);
-	void (*fill_auxv_note)(struct elf_note_info *info, ulong task);
-	struct elf_thread_core_info *thread;
-	struct memelfnote psinfo;
-	struct memelfnote auxv;
+				   struct task_context *tc,
+				   struct memelfnote *memnote);
+	void (*fill_psinfo_note)(struct elf_note_info *info,
+				 struct task_context *tc,
+				 struct memelfnote *memnote);
+	void (*fill_auxv_note)(struct elf_note_info *info,
+			       struct task_context *tc,
+			       struct memelfnote *memnote);
 	size_t size;
 	int thread_notes;
 };
@@ -821,6 +971,18 @@ extern ulong next_vma(ulong this_vma, ulong gate_vma);
 	for (index = 0, vma = first_vma(mmap, gate_vma); vma;		\
 	     ++index, vma = next_vma(vma, gate_vma))
 
+extern struct task_context *
+next_task_context(ulong tgid, struct task_context *tc);
+
+static inline struct task_context *first_task_context(ulong tgid)
+{
+	return next_task_context(tgid, FIRST_CONTEXT());
+}
+
+#define FOR_EACH_TASK_IN_THREAD_GROUP(tgid, tc)				\
+	for (tc = first_task_context(tgid); tc;				\
+	     tc = next_task_context(tgid, tc))
+
 extern int _init(void);
 extern int _fini(void);
 extern char *help_gcore[];
@@ -835,7 +997,6 @@ struct gcore_coredump_table {
 	pid_t (*task_session)(ulong task);
 
 	void (*thread_group_cputime)(ulong task,
-				     const struct thread_group_list *threads,
 				     struct task_cputime *cputime);
 
 	__kernel_uid_t (*task_uid)(ulong task);
@@ -914,6 +1075,8 @@ struct gcore_offset_table
 	long thread_struct_xstate;
 	long thread_struct_io_bitmap_max;
 	long thread_struct_io_bitmap_ptr;
+	long thread_struct_fpsimd_state;
+	long thread_struct_tp_value;
 	long user_regset_n;
 	long vfp_state_hard;
 	long vfp_hard_struct_fpregs;
@@ -1006,12 +1169,13 @@ struct gcore_elf_operations
 	 *
 	 * - No exception is raised.
 	 */
-	int (*write_elf_header)(struct gcore_elf_struct *this, int fd);
-	int (*write_section_header)(struct gcore_elf_struct *this, int fd);
-	int (*write_program_header)(struct gcore_elf_struct *this, int fd);
-	int (*write_note_header)(struct gcore_elf_struct *this, int fd,
+	int (*write_elf_header)(struct gcore_elf_struct *this, FILE *fp);
+	int (*write_section_header)(struct gcore_elf_struct *this, FILE *fp);
+	int (*write_program_header)(struct gcore_elf_struct *this, FILE *fp);
+	int (*write_note_header)(struct gcore_elf_struct *this, FILE *fp,
 				 off_t *offset);
 
+	uint64_t (*get_e_phoff)(struct gcore_elf_struct *this);
 	uint64_t (*get_e_shoff)(struct gcore_elf_struct *this);
 
 	/**
@@ -1047,7 +1211,7 @@ extern void gcore_elf_init(struct gcore_one_session_data *gcore);
 struct gcore_one_session_data
 {
 	ulong flags;
-	int fd;
+	FILE *fp;
 	ulong orig_task;
 	char corename[CORENAME_MAX_SIZE + 1];
 	struct gcore_elf_struct *elf;
@@ -1075,5 +1239,7 @@ extern void gcore_x86_32_regsets_init(void);
 extern void gcore_default_regsets_init(void);
 #define gcore_arch_regsets_init gcore_default_regsets_init
 #endif
+
+#define VDSO_HIGH_BASE 0xffffe000U
 
 #endif /* GCORE_DEFS_H_ */

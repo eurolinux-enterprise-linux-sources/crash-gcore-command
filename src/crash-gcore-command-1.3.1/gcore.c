@@ -181,8 +181,8 @@ NULL,
 void
 cmd_gcore(void)
 {
-	char c, *foptarg, *voptarg;
-	int optversion;
+	char *foptarg, *voptarg;
+	int c, optversion;
 
 	if (ACTIVE())
 		error(FATAL, "no support on live kernel\n");
@@ -319,8 +319,18 @@ static void do_gcore(char *arg)
 
 	pc->flags &= ~IN_FOREACH;
 
-	if (gcore->fd > 0)
-		close(gcore->fd);
+	if (gcore->fp != NULL) {
+		if (fflush(gcore->fp) == EOF) {
+			error(FATAL, "%s: flush %s\n", gcore->corename,
+			      strerror(errno));
+		}
+		if (fclose(gcore->fp) == EOF) {
+			gcore->fp = NULL;
+			error(FATAL, "%s: close %s\n", gcore->corename,
+			      strerror(errno));
+		}
+		gcore->fp = NULL;
+	}
 
 	if (gcore->flags & GCF_UNDER_COREDUMP) {
 		if (gcore->flags & GCF_SUCCESS)
@@ -354,6 +364,8 @@ static void gcore_offset_table_init(void)
 	if (GCORE_INVALID_MEMBER(inode_i_nlink))
 		GCORE_ANON_MEMBER_OFFSET_INIT(inode_i_nlink, "inode", "i_nlink");
 	GCORE_MEMBER_OFFSET_INIT(nsproxy_pid_ns, "nsproxy", "pid_ns");
+	if (GCORE_INVALID_MEMBER(nsproxy_pid_ns))
+		GCORE_MEMBER_OFFSET_INIT(nsproxy_pid_ns, "nsproxy", "pid_ns_for_children");
 	GCORE_MEMBER_OFFSET_INIT(mm_context_t_vdso, "mm_context_t", "vdso");
 	GCORE_MEMBER_OFFSET_INIT(mm_struct_arg_start, "mm_struct", "arg_start");
 	GCORE_MEMBER_OFFSET_INIT(mm_struct_arg_end, "mm_struct", "arg_end");
@@ -476,6 +488,8 @@ static void gcore_offset_table_init(void)
 	GCORE_MEMBER_OFFSET_INIT(vfp_state_hard, "vfp_state", "hard");
 	GCORE_MEMBER_OFFSET_INIT(vfp_hard_struct_fpregs, "vfp_hard_struct", "fpregs");
 	GCORE_MEMBER_OFFSET_INIT(vfp_hard_struct_fpscr, "vfp_hard_struct", "fpscr");
+	GCORE_MEMBER_OFFSET_INIT(thread_struct_fpsimd_state, "thread_struct", "fpsimd_state");
+	GCORE_MEMBER_OFFSET_INIT(thread_struct_tp_value, "thread_struct", "tp_value");
 }
 
 static void gcore_size_table_init(void)

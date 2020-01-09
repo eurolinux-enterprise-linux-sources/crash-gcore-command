@@ -3,8 +3,8 @@
 #
 Summary: Gcore extension module for the crash utility
 Name: crash-gcore-command
-Version: 1.2.1
-Release: 2%{?dist}
+Version: 1.3.1
+Release: 0%{?dist}
 License: GPLv2
 Group: Development/Debuggers
 Source: %{name}-%{version}.tar.gz
@@ -12,7 +12,7 @@ URL: http://people.redhat.com/anderson/extensions/%{name}-%{version}.tar.gz
 # Vendor: FUJITSU LIMITED
 # Packager: HATAYAMA Daisuke <d.hatayama@jp.fujitsu.com>
 ExclusiveOS: Linux
-ExclusiveArch: x86_64 %{ix86} arm
+ExclusiveArch: x86_64 %{ix86} arm aarch64 ppc64 ppc64le
 Buildroot: %{_tmppath}/%{name}-root
 BuildRequires: crash-devel >= 5.1.5, zlib-devel lzo-devel snappy-devel
 Requires: crash >= 5.1.5
@@ -42,6 +42,16 @@ rm -Rf $RPM_BUILD_ROOT
 %doc COPYING
 
 %changelog
+* Thu Nov 6 2014 Dave Anderson <anderson@redhat.com> - 1.3.1-0
+- Rebase to 1.3.1 to address 32-bit x86 build error.
+- Resolves: rhbz#1077311
+
+* Tue Nov 4 2014 Dave Anderson <anderson@redhat.com> - 1.3.0-0
+- Add aarch64 support
+- Resolves: rhbz#1077311
+- Add ppc64/ppc64le support
+- Resolves: rhbz#1125485
+
 * Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 1.2.1-2
 - Mass rebuild 2013-12-27
 
