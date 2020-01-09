@@ -4,19 +4,20 @@
 Summary: Gcore extension module for the crash utility
 Name: crash-gcore-command
 Version: 1.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 License: GPLv2
 Group: Development/Debuggers
 Source: %{name}-%{version}.tar.gz
 URL: http://people.redhat.com/anderson/extensions/%{name}-%{version}.tar.gz
-Vendor: FUJITSU LIMITED
+# Vendor: FUJITSU LIMITED
 # Packager: HATAYAMA Daisuke <d.hatayama@jp.fujitsu.com>
 ExclusiveOS: Linux
-ExclusiveArch: x86_64 %{ix86}
+ExclusiveArch: x86_64 %{ix86} arm
 Buildroot: %{_tmppath}/%{name}-root
 BuildRequires: crash-devel >= 5.1.5, zlib-devel
 Requires: crash >= 5.1.5
 Patch0: use_RPM_OPT_FLAGS.patch
+Patch1: VDSO_and_vsyscall_pages.patch
 
 %description
 Command for creating a core dump file of a user-space task that was
@@ -25,6 +26,7 @@ running in a kernel dumpfile.
 %prep
 %setup -q -n %{name}-%{version}
 %patch0 -p1 -b use_RPM_OPT_FLAGS.patch
+%patch1 -p1 -b VDSO_and_vsyscall_pages.patch
 
 %build
 make -f gcore.mk
@@ -44,6 +46,10 @@ rm -Rf $RPM_BUILD_ROOT
 %doc COPYING
 
 %changelog
+* Wed May 29 2012 Dave Anderson <anderson@redhat.com> - 1.0-4
+  Fixes for missing VDSO and vsyscall pages in core dump. 
+  Resolves: rbhz#890232
+
 * Tue Jan 31 2012 Dave Anderson <anderson@redhat.com> - 1.0-3
   Address Pkgwrangler/rpmlint issues.
   Resolves: rbhz#692799
